@@ -126,29 +126,34 @@ def plot_misclassified_grid(
     fig, axes = plt.subplots(rows, cols, figsize=(12, 2 * rows))
     if rows == 1:
         axes = axes.reshape(1, -1)
+    elif not isinstance(axes, np.ndarray):
+        axes = np.array([[axes]])
     
-    for idx in range(rows * cols):
+    # Plot only the actual samples we have
+    for idx in range(n_samples):
         row = idx // cols
         col = idx % cols
+        img = X_mis[idx]
+        if dataset == 'mnist':
+            # (1, 28, 28) -> (28, 28)
+            img = img[0] if img.shape[0] == 1 else img
+            axes[row, col].imshow(img, cmap='gray')
+        else:  # CIFAR-10
+            # (3, 32, 32) -> (32, 32, 3)
+            img = np.transpose(img, (1, 2, 0))
+            axes[row, col].imshow(img)
         
-        if idx < n_samples:
-            img = X_mis[idx]
-            if dataset == 'mnist':
-                # (1, 28, 28) -> (28, 28)
-                img = img[0] if img.shape[0] == 1 else img
-                axes[row, col].imshow(img, cmap='gray')
-            else:  # CIFAR-10
-                # (3, 32, 32) -> (32, 32, 3)
-                img = np.transpose(img, (1, 2, 0))
-                axes[row, col].imshow(img)
-            
-            axes[row, col].set_title(
-                f'True: {y_true_mis[idx]}\nPred: {y_pred_mis[idx]}',
-                fontsize=8
-            )
-            axes[row, col].axis('off')
-        else:
-            axes[row, col].axis('off')
+        axes[row, col].set_title(
+            f'True: {y_true_mis[idx]}\nPred: {y_pred_mis[idx]}',
+            fontsize=8
+        )
+        axes[row, col].axis('off')
+    
+    # Hide unused subplots
+    for idx in range(n_samples, rows * cols):
+        row = idx // cols
+        col = idx % cols
+        axes[row, col].axis('off')
     
     plt.suptitle('Misclassified Samples', fontsize=14)
     plt.tight_layout()

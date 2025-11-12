@@ -80,6 +80,32 @@ def evaluate(model, X, y, batch_size):
     return np.mean(losses), np.mean(accs), all_logits, all_labels
 
 
+def save_checkpoint(model, path: str) -> None:
+    """Save trainable layer parameters to a .npz file."""
+    state = {}
+    trainable_layers = model.get_trainable_layers()
+    for idx, layer in enumerate(trainable_layers):
+        state[f"layer{idx}_weights"] = layer.weights
+        if hasattr(layer, 'bias_weights') and layer.bias_weights is not None:
+            state[f"layer{idx}_bias"] = layer.bias_weights
+    np.savez(path, **state)
+
+
+def load_checkpoint(model, path: str, sample_input: np.ndarray) -> None:
+    """
+    Load parameters from a .npz file. Runs a dummy forward to initialize shapes
+    before assigning weights/bias.
+    """
+    data = np.load(path)
+    # initialize layers' params by one forward pass
+    _ = model.forward(sample_input)
+    trainable_layers = model.get_trainable_layers()
+    for idx, layer in enumerate(trainable_layers):
+        layer.weights[:] = data[f"layer{idx}_weights"]
+        if hasattr(layer, 'bias_weights') and f"layer{idx}_bias" in data:
+            layer.bias_weights[:] = data[f"layer{idx}_bias"]
+
+
 def main():
     parser = argparse.ArgumentParser(description='Train NumPy CNN')
     parser.add_argument('--dataset', type=str, required=True, choices=['mnist', 'cifar10'],
@@ -94,6 +120,8 @@ def main():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--no_pool', action='store_true', help='Remove pooling layers')
     parser.add_argument('--save_prefix', type=str, default=None, help='Save prefix')
+    parser.add_argument('--resume_from', type=str, default=None, help='Path to checkpoint .npz to resume from')
+    parser.add_argument('--checkpoint_prefix', type=str, default=None, help='Prefix for saving epoch checkpoints (.npz)')
     
     args = parser.parse_args()
     
@@ -144,11 +172,21 @@ def main():
     save_prefix = args.save_prefix or f"{args.dataset}_numpy"
     log_file = Path(f"outputs/logs/{save_prefix}_log.csv")
     log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Setup checkpointing
+    ckpt_prefix = args.checkpoint_prefix or f"outputs/logs/{save_prefix}_epoch"
     
     with open(log_file, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['epoch', 'train_loss', 'train_acc', 'test_loss', 'test_acc'])
     
+    # Resume if requested
+    if args.resume_from:
+        print(f"Resuming from checkpoint: {args.resume_from}")
+        # use first training sample to initialize shapes
+        sample_input = X_train[:1]
+        load_checkpoint(model, args.resume_from, sample_input)
+
     print("\nStarting training...")
     print("Note: NumPy CNN from scratch is slow due to naive loop implementation.")
     print("This is expected - each epoch may take 5-10 minutes on CPU.\n")
@@ -178,6 +216,11 @@ def main():
         with open(log_file, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([epoch, train_loss, train_acc, test_loss, test_acc])
+
+        # Save checkpoint after each epoch
+        ckpt_path = Path(f"{ckpt_prefix}{epoch}.npz")
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        save_checkpoint(model, str(ckpt_path))
     
     # Final evaluation for confusion matrix and misclassified
     print("\nGenerating final predictions...")
