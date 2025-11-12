@@ -236,6 +236,8 @@ def main():
     misclassified_images = []
     misclassified_preds = []
     misclassified_labels = []
+    total_mis = 0
+    max_samples = 24
     
     with torch.no_grad():
         for data, target in test_loader:
@@ -245,17 +247,31 @@ def main():
             
             mis_mask = predicted != target
             if mis_mask.any():
-                misclassified_images.append(data[mis_mask].cpu())
-                misclassified_preds.extend(predicted[mis_mask].cpu().numpy())
-                misclassified_labels.extend(target[mis_mask].cpu().numpy())
-            
-            if len(misclassified_images) >= 24:
-                break
+                mis_data = data[mis_mask].cpu()
+                mis_pred = predicted[mis_mask].cpu().numpy()
+                mis_label = target[mis_mask].cpu().numpy()
+                
+                # Count how many we need
+                n_needed = min(len(mis_data), max_samples - total_mis)
+                if n_needed > 0:
+                    misclassified_images.append(mis_data[:n_needed])
+                    misclassified_preds.extend(mis_pred[:n_needed])
+                    misclassified_labels.extend(mis_label[:n_needed])
+                    total_mis += n_needed
+                
+                if total_mis >= max_samples:
+                    break
     
     if misclassified_images:
-        X_mis = torch.cat(misclassified_images[:24], dim=0).numpy()
-        y_pred_mis = np.array(misclassified_preds[:24])
-        y_true_mis = np.array(misclassified_labels[:24])
+        X_mis = torch.cat(misclassified_images, dim=0).numpy()
+        y_pred_mis = np.array(misclassified_preds)
+        y_true_mis = np.array(misclassified_labels)
+        
+        # Ensure exactly max_samples (or less if not enough)
+        n_actual = min(len(X_mis), max_samples)
+        X_mis = X_mis[:n_actual]
+        y_pred_mis = y_pred_mis[:n_actual]
+        y_true_mis = y_true_mis[:n_actual]
     else:
         X_mis = np.array([])
         y_pred_mis = np.array([])

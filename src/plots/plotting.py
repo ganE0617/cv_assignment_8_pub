@@ -119,6 +119,15 @@ def plot_misclassified_grid(
         print("No misclassified samples to plot.")
         return
     
+    # Ensure all arrays have the same length
+    min_len = min(len(X_mis), len(y_pred_mis), len(y_true_mis))
+    if min_len < n_samples:
+        print(f"Warning: Array length mismatch. Using {min_len} samples instead of {n_samples}.")
+        n_samples = min_len
+        X_mis = X_mis[:n_samples]
+        y_pred_mis = y_pred_mis[:n_samples]
+        y_true_mis = y_true_mis[:n_samples]
+    
     # Determine grid size
     cols = 6
     rows = (n_samples + cols - 1) // cols
